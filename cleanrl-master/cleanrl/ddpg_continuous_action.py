@@ -32,7 +32,7 @@ class Args:
     """the wandb's project name"""
     wandb_entity: str = None
     """the entity (team) of wandb's project"""
-    capture_video: bool = False
+    capture_video: bool = True
     """whether to capture videos of the agent performances (check out `videos` folder)"""
     save_model: bool = False
     """whether to save model into the `runs/{run_name}` folder"""
@@ -114,6 +114,84 @@ class Actor(nn.Module):
         x = torch.tanh(self.fc_mu(x))
         return x * self.action_scale + self.action_bias
 
+def unwrap_env(env):
+    """Récupère l'environnement sous-jacent contenant .sim"""
+    while hasattr(env, "env"):
+        env = env.env
+    return env
+
+def get_box2d_state(env):
+    state = {
+        "lander": (
+            env.lander.position.copy(),
+            env.lander.linearVelocity.copy(),
+            env.lander.angle,
+            env.lander.angularVelocity,
+        ),
+        "legs": [
+            (leg.ground_contact, leg.position.copy(), leg.linearVelocity.copy())
+            for leg in env.legs
+        ],
+    }
+    return state
+
+def set_box2d_state(env, state):
+    env.lander.position = state["lander"][0].copy()
+    env.lander.linearVelocity = state["lander"][1].copy()
+    env.lander.angle = state["lander"][2]
+    env.lander.angularVelocity = state["lander"][3]
+
+    for leg, (contact, pos, vel) in zip(env.legs, state["legs"]):
+        leg.ground_contact = contact
+        leg.position = pos.copy()
+        leg.linearVelocity = vel.copy()
+
+
+def Monte_Carlo(s, a, envs, args, max_step, N):
+
+
+    base_env = unwrap_env(envs.envs[0])
+    state_data = get_box2d_state(base_env)
+
+    etas_init = s.copy()
+    actions_init = a.copy()
+    list_G0 = []
+    
+    for i in range(N):
+        set_box2d_state(base_env, state_data)
+
+        next_etas_init, reward, terminated, truncated, info = base_env.step(actions_init)
+        done = terminated or truncated
+
+        discount_factor = 1.0
+
+        G0 = reward
+        etas_init = next_etas_init
+
+        j = 0
+        
+        while not done and j < max_step:
+            etas_tensor = torch.tensor(etas_init, dtype=torch.float32).unsqueeze(0)
+            
+            etas_tensor = etas_tensor.to("cuda")
+            with torch.no_grad():
+                action = actor(etas_tensor).cpu().numpy()[0]  
+            etas_init, reward, terminated, truncated, info = base_env.step(action)
+            done = terminated or truncated
+            
+            G0 += discount_factor*reward 
+            discount_factor *= args.gamma
+            j +=1 
+        etas_init = s.copy()
+        actions_init = a.copy()
+        list_G0.append(G0)
+
+    G_pi = np.mean(list_G0)
+
+    set_box2d_state(base_env, state_data)
+
+    return G_pi
+
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
@@ -143,6 +221,7 @@ if __name__ == "__main__":
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+
 
     # env setup
     envs = gym.vector.SyncVectorEnv([make_env(args.env_id, args.seed, 0, args.capture_video, run_name)])
@@ -178,14 +257,19 @@ if __name__ == "__main__":
                 actions = actor(torch.Tensor(obs).to(device))
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
                 actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
-
+        
+        if global_step % 10000 == 0:
+            s = obs[0]
+            a = actions[0]      
+            G_pi = Monte_Carlo(s, a, envs, args, max_step=300, N=100)
+            
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
-                print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                #print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
                 writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
                 writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
                 break
@@ -228,12 +312,14 @@ if __name__ == "__main__":
                 for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 100 == 0:
+            if global_step % 10000 == 0:
+                writer.add_scalar("losses/G_pi", G_pi.item(), global_step)
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
                 writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
-                print("SPS:", int(global_step / (time.time() - start_time)))
+                #print("SPS:", int(global_step / (time.time() - start_time)))
                 writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                print("G_pi :", G_pi, "qf1_values :", qf1_a_values.mean().item(), "global_step :", global_step)
 
     if args.save_model:
         model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
@@ -263,3 +349,5 @@ if __name__ == "__main__":
 
     envs.close()
     writer.close()
+
+
