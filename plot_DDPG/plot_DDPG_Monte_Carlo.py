@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing import event_accumulator
-
-log_dir = "..\\cleanrl-master\\runs\\LunarLanderContinuous-v3__ddpg_continuous_action__1__1760289655"  # remplace par ton run_name
+import json
+log_dir = "..\\src\\runs\\LunarLanderContinuous-v3__ddpg_monte_carlo_continuous_action__9__1760536208"  # remplace par ton run_name
 
 ea = event_accumulator.EventAccumulator(log_dir)
 ea.Reload()
@@ -10,9 +10,18 @@ print("Tags disponibles:", ea.Tags()["scalars"])
 
 qf1_values_events = ea.Scalars("losses/qf1_values")
 G_pi_events = ea.Scalars("losses/G_pi")
+events = ea.Tensors("losses/G0_list/text_summary")
 
 qf1_values = [(e.step, e.value) for e in qf1_values_events]
 G_pi_values = [(e.step, e.value) for e in G_pi_events]
+
+events = ea.Tensors("losses/G0_list/text_summary")
+for event in events:
+    raw_str = event.tensor_proto.string_val[0].decode("utf-8")
+    list_G0_loaded = json.loads(raw_str)
+
+    print("\n✅ Liste relue depuis TensorBoard :", list_G0_loaded, event.step)
+
 
 steps_qf1, qf1_vals = zip(*qf1_values)
 steps_G_pi, G_pi_vals = zip(*G_pi_values)

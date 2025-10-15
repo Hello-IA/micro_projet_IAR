@@ -13,8 +13,8 @@ import torch.optim as optim
 import tyro
 from torch.utils.tensorboard import SummaryWriter
 
-from cleanrl_utils.buffers import ReplayBuffer
-
+from buffers import ReplayBuffer
+import json
 
 @dataclass
 class Args:
@@ -44,7 +44,7 @@ class Args:
     # Algorithm specific arguments
     env_id: str = "LunarLanderContinuous-v3"
     """the environment id of the Atari game"""
-    total_timesteps: int = 1000000
+    total_timesteps: int = 300000
     """total timesteps of the experiments"""
     learning_rate: float = 3e-4
     """the learning rate of the optimizer"""
@@ -190,7 +190,7 @@ def Monte_Carlo(s, a, envs, actor, args, max_step, N):
 
     set_box2d_state(base_env, state_data)
 
-    return G_pi
+    return G_pi, list_G0
 
 def ddpg_monte_carlo(args):
     run_name = f"{args.env_id}__{args.exp_name}__{args.seed}__{int(time.time())}"
@@ -211,6 +211,7 @@ def ddpg_monte_carlo(args):
         "hyperparameters",
         "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(args).items()])),
     )
+    
 
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
@@ -256,10 +257,7 @@ def ddpg_monte_carlo(args):
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
                 actions = actions.cpu().numpy().clip(envs.single_action_space.low, envs.single_action_space.high)
         
-        if global_step % 10000 == 0:
-            s = obs[0]
-            a = actions[0]      
-            G_pi = Monte_Carlo(s, a, envs, actor, args, max_step=300, N=100)
+        
             
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(actions)
@@ -310,7 +308,12 @@ def ddpg_monte_carlo(args):
                 for param, target_param in zip(qf1.parameters(), qf1_target.parameters()):
                     target_param.data.copy_(args.tau * param.data + (1 - args.tau) * target_param.data)
 
-            if global_step % 10000 == 0:
+
+            if global_step % 20000 == 0:
+                s = obs[0]
+                a = actions[0]      
+                G_pi, list_G0 = Monte_Carlo(s, a, envs, actor, args, max_step=300, N=100)
+                writer.add_text("losses/G0_list", json.dumps(list_G0), global_step)
                 writer.add_scalar("losses/G_pi", G_pi.item(), global_step)
                 writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
                 writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
@@ -350,7 +353,7 @@ def ddpg_monte_carlo(args):
 
 if __name__ == "__main__":
     args = tyro.cli(Args)
-    for seed in range(2, 11):
+    for seed in range(1, 11):
         args.seed = seed
         ddpg_monte_carlo(args)    
     
