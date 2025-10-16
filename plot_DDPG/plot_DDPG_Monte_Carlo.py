@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 from tensorboard.backend.event_processing import event_accumulator
 import json
-log_dir = "..\\src\\runs\\LunarLanderContinuous-v3__ddpg_monte_carlo_continuous_action__9__1760536208"  # remplace par ton run_name
+log_dir = "..\\src\\runs_td3\\LunarLanderContinuous-v3__td3_continuous_action__2__1760568877"  # remplace par ton run_name
 
 ea = event_accumulator.EventAccumulator(log_dir)
 ea.Reload()
