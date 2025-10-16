@@ -25,3 +25,10 @@ log_dirs_td3 = [
     "..\\src\\runs_td3\\LunarLanderContinuous-v3__td3_continuous_action__9__1760601115",
     "..\\src\\runs_td3\\LunarLanderContinuous-v3__td3_continuous_action__10__1760602590",
 ]
+
+log_dirs_ddpg_1000000 = [
+    "..\\cleanrl-master\\runs\\ddpg_1",
+    "..\\cleanrl-master\\runs\\LunarLanderContinuous-v3__ddpg_continuous_action__2__1760355381",
+    "..\\cleanrl-master\\runs\\LunarLanderContinuous-v3__ddpg_continuous_action__3__1760396155",
+    "..\\cleanrl-master\\runs\\LunarLanderContinuous-v3__ddpg_continuous_action__4__1760446278",
+]
