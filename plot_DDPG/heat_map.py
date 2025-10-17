@@ -75,8 +75,8 @@ im = plt.imshow(
 
 
 # --- Ajout de la légende explicite ---
-red_patch = mpatches.Patch(color=plt.cm.coolwarm(1.0), label="Sur-estimation (Q_val > G₀)")
-blue_patch = mpatches.Patch(color=plt.cm.coolwarm(0.0), label="Sous-estimation (Q_val < G₀)")
+red_patch = mpatches.Patch(color=plt.cm.coolwarm(1.0), label="Sur-estimation (Q_val > Gt)")
+blue_patch = mpatches.Patch(color=plt.cm.coolwarm(0.0), label="Sous-estimation (Q_val < Gt)")
 plt.legend(
     handles=[red_patch, blue_patch],
     loc="upper right",
